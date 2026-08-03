@@ -137,65 +137,28 @@ template <class T>
 inline constexpr bool is_integral_v = is_integral<remove_cvref_t<T>>::value;
 
 template <class T>
-struct is_static : bool_constant<std::is_empty_v<T>> {};
-
-template <class T>
-struct is_static<T const> : is_static<T> {};
-template <class T>
-struct is_static<T volatile> : is_static<T> {};
-template <class T>
-struct is_static<T const volatile> : is_static<T> {};
-template <class T>
-struct is_static<T&> : is_static<T> {};
-template <class T>
-struct is_static<T const&> : is_static<T> {};
-template <class T>
-struct is_static<T volatile&> : is_static<T> {};
-template <class T>
-struct is_static<T const volatile&> : is_static<T> {};
-template <class T>
-struct is_static<T&&> : is_static<T> {};
-template <class T>
-struct is_static<T const&&> : is_static<T> {};
-template <class T>
-struct is_static<T volatile&&> : is_static<T> {};
-template <class T>
-struct is_static<T const volatile&&> : is_static<T> {};
+struct is_static : bool_constant<std::is_empty_v<remove_cvref_t<T>>> {};
 
 template <class T>
 inline constexpr bool is_static_v = is_static<T>::value;
 
+namespace detail {
+
 template <auto N, class T>
-struct is_constant : false_type {};
+struct is_constant_base : false_type {};
 
 template <auto N, auto V>
-struct is_constant<N, C<V>> : bool_constant<(V == N)> {};
+struct is_constant_base<N, C<V>> : bool_constant<(V == N)> {};
 
 template <auto N, class T, T V>
-struct is_constant<N, integral_constant<T, V>> : bool_constant<(V == N)> {};
+struct is_constant_base<N, integral_constant<T, V>>
+    : bool_constant<(V == N)> {};
+
+} // namespace detail
 
 template <auto N, class T>
-struct is_constant<N, T const> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T volatile> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T const volatile> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T const&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T volatile&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T const volatile&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T&&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T const&&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T volatile&&> : is_constant<N, T> {};
-template <auto N, class T>
-struct is_constant<N, T const volatile&&> : is_constant<N, T> {};
+struct is_constant
+    : detail::is_constant_base<N, remove_cvref_t<T>> {};
 
 template <auto N, class T>
 inline constexpr bool is_constant_v = is_constant<N, T>::value;
@@ -601,14 +564,14 @@ template <class TrueType, class FalseType>
 constexpr decltype(auto) conditional_return(true_type,
                                              TrueType&& true_value,
                                              FalseType&&) {
-  return static_cast<TrueType&&>(true_value);
+  return std::forward<TrueType>(true_value);
 }
 
 template <class TrueType, class FalseType>
 constexpr decltype(auto) conditional_return(false_type,
                                              TrueType&&,
                                              FalseType&& false_value) {
-  return static_cast<FalseType&&>(false_value);
+  return std::forward<FalseType>(false_value);
 }
 
 template <auto V>
