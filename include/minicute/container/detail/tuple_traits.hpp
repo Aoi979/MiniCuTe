@@ -35,35 +35,39 @@ template <class... Ts> struct is_tuple<tuple<Ts...>> : std::true_type {};
 template <class T>
 inline constexpr bool is_tuple_v = is_tuple<remove_cvref_t<T>>::value;
 
-template <class... Ts> struct tuple_size<tuple<Ts...>> {
+template <class... Ts> struct tuple_size<tuple<Ts...>, void> {
     static constexpr std::size_t value = sizeof...(Ts);
 };
 
-template <class T> struct tuple_size<const T> {
+template <class T> struct tuple_size<const T, void> {
     static constexpr std::size_t value = tuple_size<T>::value;
 };
 
-template <class T> struct tuple_size<volatile T> {
+template <class T> struct tuple_size<volatile T, void> {
     static constexpr std::size_t value = tuple_size<T>::value;
 };
 
-template <class T> struct tuple_size<const volatile T> {
+template <class T> struct tuple_size<const volatile T, void> {
     static constexpr std::size_t value = tuple_size<T>::value;
 };
 
-template <std::size_t I, class... Ts> struct tuple_element<I, tuple<Ts...>> {
+template <std::size_t I, class... Ts>
+struct tuple_element<I, tuple<Ts...>, void> {
     using type = detail::type_at_t<I, Ts...>;
 };
 
-template <std::size_t I, class T> struct tuple_element<I, const T> {
+template <std::size_t I, class T>
+struct tuple_element<I, const T, void> {
     using type = const typename tuple_element<I, T>::type;
 };
 
-template <std::size_t I, class T> struct tuple_element<I, volatile T> {
+template <std::size_t I, class T>
+struct tuple_element<I, volatile T, void> {
     using type = volatile typename tuple_element<I, T>::type;
 };
 
-template <std::size_t I, class T> struct tuple_element<I, const volatile T> {
+template <std::size_t I, class T>
+struct tuple_element<I, const volatile T, void> {
     using type = const volatile typename tuple_element<I, T>::type;
 };
 
@@ -72,9 +76,12 @@ template <std::size_t I, class T> struct tuple_element<I, const volatile T> {
 namespace std {
 
 template <class... Ts>
-struct tuple_size<minicute::tuple<Ts...>> : minicute::tuple_size<minicute::tuple<Ts...>> {};
+struct tuple_size<minicute::tuple<Ts...>>
+    : integral_constant<std::size_t, sizeof...(Ts)> {};
 
 template <std::size_t I, class... Ts>
-struct tuple_element<I, minicute::tuple<Ts...>> : minicute::tuple_element<I, minicute::tuple<Ts...>> {};
+struct tuple_element<I, minicute::tuple<Ts...>> {
+    using type = minicute::detail::type_at_t<I, Ts...>;
+};
 
 } // namespace std
