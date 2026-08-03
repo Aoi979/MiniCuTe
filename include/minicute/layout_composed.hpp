@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tensor.hpp"
+#include <minicute/tensor.hpp>
 
 #include <ostream>
 

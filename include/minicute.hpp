@@ -3,8 +3,9 @@
 // Umbrella header for MiniCuTe.
 // Students normally include only this file.
 
-#include "minicute/core.hpp"
+#include "minicute/int_tuple.hpp"
 #include "minicute/layout.hpp"
+#include "minicute/layout_composed.hpp"
+#include "minicute/numeric/integral_constant.hpp"
 #include "minicute/tensor.hpp"
-#include "minicute/algebra.hpp"
 #include "minicute/tiling.hpp"

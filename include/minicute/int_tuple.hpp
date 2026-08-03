@@ -2,7 +2,7 @@
 
 #include "algorithm/tuple_algorithms.hpp"
 #include "container/tuple.hpp"
-#include "integer.hpp"
+#include <minicute/numeric/integral_constant.hpp>
 
 #include <cstddef>
 #include <type_traits>

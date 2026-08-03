@@ -1,6 +1,6 @@
 #pragma once
 
-#include "algebra.hpp"
+#include <minicute/layout_composed.hpp>
 
 namespace minicute {
 

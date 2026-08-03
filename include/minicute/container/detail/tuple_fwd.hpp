@@ -1,6 +1,6 @@
 #pragma once
 
-#include <minicute/detail/utility.hpp>
+#include <minicute/util/type_traits.hpp>
 
 #include <cstddef>
 

@@ -20,7 +20,7 @@ target_include_directories(minicute INTERFACE
 set(MINICUTE_HEADERS
     include/minicute.hpp
     include/minicute/algorithm/tuple_algorithms.hpp
-    include/minicute/algebra.hpp
+    include/minicute/layout_composed.hpp
     include/minicute/container/tuple.hpp
     include/minicute/container/detail/tuple_access.hpp
     include/minicute/container/detail/tuple_algorithms.hpp
@@ -28,10 +28,9 @@ set(MINICUTE_HEADERS
     include/minicute/container/detail/tuple_fwd.hpp
     include/minicute/container/detail/tuple_storage.hpp
     include/minicute/container/detail/tuple_traits.hpp
-    include/minicute/core.hpp
-    include/minicute/detail/utility.hpp
+    include/minicute/util/type_traits.hpp
     include/minicute/int_tuple.hpp
-    include/minicute/integer.hpp
+    include/minicute/numeric/integral_constant.hpp
     include/minicute/layout.hpp
     include/minicute/tensor.hpp
     include/minicute/tiling.hpp)

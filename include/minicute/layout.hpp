@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.hpp"
+#include <minicute/int_tuple.hpp>
 #include <cstddef>
 #include <utility>
 
