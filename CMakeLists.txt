@@ -31,6 +31,7 @@ set(MINICUTE_HEADERS
     include/minicute/util/type_traits.hpp
     include/minicute/int_tuple.hpp
     include/minicute/numeric/integral_constant.hpp
+    include/minicute/numeric/integer_sequence.hpp
     include/minicute/layout.hpp
     include/minicute/tensor.hpp
     include/minicute/tiling.hpp)
