@@ -78,7 +78,7 @@ constexpr auto tuple_cat(First&& first, Second&& second, Rest&&... rest) {
         return joined;
     } else {
         return tuple_cat(std::move(joined), std::forward<Rest>(rest)...);
-    }
+  }
 }
 
 } // namespace minicute

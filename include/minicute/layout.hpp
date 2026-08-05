@@ -2,85 +2,13 @@
 
 #include <cstddef>
 #include <minicute/int_tuple.hpp>
+#include <minicute/stride.hpp>
 #include <utility>
 
 namespace minicute {
 
-struct LayoutLeft {};
-struct LayoutRight {};
 struct underscore_t {};
 inline constexpr underscore_t _{};
-
-template <class Shape, class Current = _1>
-constexpr auto compact_col_major(Shape const &shape,
-                                 Current const &current = {});
-
-namespace detail {
-template <std::size_t I, class Shape, std::size_t... Is>
-constexpr auto col_major_prefix(Shape const &shape,
-                                std::index_sequence<Is...>) {
-  return (product(get<Is>(shape)) * ... * _1{});
-}
-
-template <std::size_t I, class Shape>
-constexpr auto col_major_prefix(Shape const &shape) {
-  return col_major_prefix<I>(shape, std::make_index_sequence<I>{});
-}
-
-template <class Shape, class Current, std::size_t... Is>
-constexpr auto compact_col_major_impl(Shape const &shape,
-                                      Current const &current,
-                                      std::index_sequence<Is...>) {
-  return make_stride(compact_col_major(
-      get<Is>(shape), current * col_major_prefix<Is>(shape))...);
-}
-} // namespace detail
-
-template <class Shape, class Current>
-constexpr auto compact_col_major(Shape const &shape, Current const &current) {
-  if constexpr (is_tuple_v<Shape>) {
-    return detail::compact_col_major_impl(
-        shape, current, std::make_index_sequence<tuple_size_v<Shape>>{});
-  } else {
-    return current;
-  }
-}
-
-template <class Shape, class Current = _1>
-constexpr auto compact_row_major(Shape const &shape,
-                                 Current const &current = {});
-
-namespace detail {
-template <std::size_t I, class Shape, std::size_t... Is>
-constexpr auto row_major_suffix(Shape const &shape,
-                                std::index_sequence<Is...>) {
-  return (product(get<I + 1 + Is>(shape)) * ... * _1{});
-}
-
-template <std::size_t I, class Shape>
-constexpr auto row_major_suffix(Shape const &shape) {
-  return row_major_suffix<I>(
-      shape, std::make_index_sequence<tuple_size_v<Shape> - I - 1>{});
-}
-
-template <class Shape, class Current, std::size_t... Is>
-constexpr auto compact_row_major_impl(Shape const &shape,
-                                      Current const &current,
-                                      std::index_sequence<Is...>) {
-  return make_stride(compact_row_major(
-      get<Is>(shape), current * row_major_suffix<Is>(shape))...);
-}
-} // namespace detail
-
-template <class Shape, class Current>
-constexpr auto compact_row_major(Shape const &shape, Current const &current) {
-  if constexpr (is_tuple_v<Shape>) {
-    return detail::compact_row_major_impl(
-        shape, current, std::make_index_sequence<tuple_size_v<Shape>>{});
-  } else {
-    return current;
-  }
-}
 
 template <class Coord, class Shape, class Stride>
 constexpr auto crd2idx(Coord const &coord, Shape const &shape,
@@ -198,8 +126,6 @@ constexpr auto crd2idx_itt(Coord const &coord, Shape const &shape,
                            Stride const &stride,
                            std::index_sequence<I0, Is...>) {
   if constexpr (sizeof...(Is) == 0) {
-    // A one-mode tuple is still an unbounded coordinate conversion.  Do not
-    // introduce an extra modulo here; this matches CuTe's crd2idx contract.
     return crd2idx(coord, get<I0>(shape), get<I0>(stride));
   } else {
     auto mode_size = product(get<I0>(shape));
@@ -820,5 +746,73 @@ constexpr auto composition(Layout<LShape, LStride> const &lhs,
 
   return compose_one(compose_one, lhs.shape(), lhs.stride(), rhs.shape(),
                      rhs.stride());
+}
+
+namespace detail {
+
+template <std::size_t I, class RestShape, class RestStride, class ResultShape,
+          class ResultStride>
+constexpr auto complement_scan(RestShape const &rest_shape,
+                               RestStride const &rest_stride,
+                               ResultShape const &result_shape,
+                               ResultStride const &result_stride) {
+  auto min_stride = min(rest_stride);
+  auto min_index = find(rest_stride, min_stride);
+
+  constexpr auto result_rank = tuple_size_v<ResultShape>;
+  auto current_stride = get<result_rank>(result_stride);
+  auto new_shape = min_stride / current_stride;
+
+  static_assert(!is_constant_v<0, decltype(new_shape)>,
+                "Non-injective Layout detected in complement");
+
+  constexpr int J = static_cast<int>(decltype(min_index)::value);
+  auto new_stride = get<J>(rest_shape) * min_stride;
+
+  auto next_result_shape = append(result_shape, new_shape);
+  auto next_result_stride = append(result_stride, new_stride);
+
+  if constexpr (I == 0) {
+    return make_tuple(next_result_shape, next_result_stride, new_stride);
+  } else {
+    auto next_rest_shape = remove<J>(rest_shape);
+    auto next_rest_stride = remove<J>(rest_stride);
+    return complement_scan<I - 1>(next_rest_shape, next_rest_stride,
+                                  next_result_shape, next_result_stride);
+  }
+}
+
+} // namespace detail
+
+template <class Shape, class Stride, class CoTarget>
+constexpr auto complement(Layout<Shape, Stride> const &layout,
+                          CoTarget const &cotarget) {
+  auto filtered_layout = filter(layout);
+
+  if constexpr (is_constant_v<0, decltype(filtered_layout.stride())>) {
+    return coalesce(make_layout(cotarget));
+  } else {
+    constexpr int R =
+        static_cast<int>(decltype(rank(filtered_layout.shape()))::value);
+
+    auto state = detail::complement_scan<static_cast<std::size_t>(R - 1)>(
+        wrap(filtered_layout.shape()), wrap(filtered_layout.stride()),
+        tuple<>{}, tuple<_1>{});
+
+    auto result_shape = get<0>(state);
+    auto result_stride = get<1>(state);
+    auto terminal_stride = get<2>(state);
+
+    auto rest_shape = ceil_div(cotarget, terminal_stride);
+
+    return coalesce(
+        make_layout(make_shape(result_shape, rest_shape),
+                    make_stride(result_stride, terminal_stride)));
+  }
+}
+
+template <class Shape, class Stride>
+constexpr auto complement(Layout<Shape, Stride> const &layout) {
+  return complement(layout, cosize(filter(layout)));
 }
 } // namespace minicute
