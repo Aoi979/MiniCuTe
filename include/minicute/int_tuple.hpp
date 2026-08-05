@@ -11,8 +11,9 @@
 namespace minicute {
 
 // An IntTuple is either an integer leaf or a nested minicute::tuple of
-// IntTuples.  This file contains the recursive operations on that structure;
-// the tuple container itself lives in container/tuple.hpp.
+// IntTuples.  This file contains recursive operations on that structure;
+// generic tuple algorithms live in algorithm/tuple_algorithms.hpp, while the
+// tuple container itself lives in container/tuple.hpp.
 template <class... Ts> using Shape = tuple<Ts...>;
 
 template <class... Ts> using Stride = tuple<Ts...>;
@@ -52,10 +53,58 @@ constexpr decltype(auto) get(T &&value) noexcept {
   return get<I1, Is...>(get<I0>(std::forward<T>(value)));
 }
 
-template <class T> constexpr auto max(T x) { return x; }
+template <class T0, class... Ts>
+constexpr auto min(T0 const &first, Ts const &...rest) {
+  if constexpr (is_tuple_v<T0>) {
+    using Tuple = remove_cvref_t<T0>;
+
+    static_assert(tuple_size_v<Tuple> > 0,
+                  "min of an empty tuple is undefined");
+
+    auto reduced =
+        apply(first, [](auto const &...values) { return min(values...); });
+
+    if constexpr (sizeof...(Ts) == 0) {
+      return reduced;
+    } else {
+      return min(reduced, rest...);
+    }
+  } else if constexpr (sizeof...(Ts) == 0) {
+    return first;
+  } else {
+    return min(first, min(rest...));
+  }
+}
+
+template <class T0, class... Ts>
+constexpr auto max(T0 const &first, Ts const &...rest) {
+  if constexpr (is_tuple_v<T0>) {
+    using Tuple = remove_cvref_t<T0>;
+
+    static_assert(tuple_size_v<Tuple> > 0,
+                  "max of an empty tuple is undefined");
+
+    auto reduced =
+        apply(first, [](auto const &...values) { return max(values...); });
+
+    if constexpr (sizeof...(Ts) == 0) {
+      return reduced;
+    } else {
+      return max(reduced, rest...);
+    }
+  } else if constexpr (sizeof...(Ts) == 0) {
+    return first;
+  } else {
+    return max(first, max(rest...));
+  }
+}
 
 template <auto A, auto B> constexpr auto max(C<A>, C<B>) {
   return C<(A > B ? A : B)>{};
+}
+
+template <auto A, auto B> constexpr auto min(C<A>, C<B>) {
+  return C<(A < B ? A : B)>{};
 }
 
 template <class T0, class T1, class... Ts>
@@ -135,10 +184,9 @@ template <class T> constexpr auto flatten(T const &t) {
     if constexpr (tuple_size_v<T> == 0) {
       return minicute::tuple<>{};
     } else {
-      return apply(t,
-                   [](auto const &...x) {
-                     return minicute::tuple_cat(flatten(x)...);
-                   });
+      return apply(t, [](auto const &...x) {
+        return minicute::tuple_cat(flatten(x)...);
+      });
     }
   } else {
     return minicute::tuple<remove_cvref_t<T>>{t};
@@ -198,138 +246,6 @@ constexpr auto unflatten(Flat const &f, Profile const &p) {
   }
 }
 
-template <class T> constexpr auto wrap(T const &t) {
-  if constexpr (is_tuple_v<T>) {
-    return t;
-  } else {
-    return minicute::tuple<remove_cvref_t<T>>{t};
-  }
-}
-
-template <class T> constexpr auto unwrap(T const &t) {
-  if constexpr (is_tuple_v<T>) {
-    if constexpr (tuple_size_v<T> == 1) {
-      return get<0>(t);
-    } else {
-      return t;
-    }
-  } else {
-    return t;
-  }
-}
-
-template <class Tuple, class X>
-constexpr auto append(Tuple const &t, X const &x) {
-  if constexpr (is_tuple_v<Tuple>) {
-    return minicute::tuple_cat(t, minicute::tuple<remove_cvref_t<X>>{x});
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "append only works on tuples");
-  }
-}
-
-template <class Tuple, class X>
-constexpr auto prepend(Tuple const &t, X const &x) {
-  if constexpr (is_tuple_v<Tuple>) {
-    return minicute::tuple_cat(minicute::tuple<remove_cvref_t<X>>{x}, t);
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "prepend only works on tuples");
-  }
-}
-
-namespace detail {
-template <int I, class Tuple, class X, std::size_t... Is1, std::size_t... Is2>
-constexpr auto replace_impl(Tuple const &t, X const &x,
-                            std::index_sequence<Is1...>,
-                            std::index_sequence<Is2...>) {
-  return minicute::tuple_cat(
-      minicute::tuple<minicute::tuple_element_t<Is1, remove_cvref_t<Tuple>>...>{
-          get<Is1>(t)...},
-      minicute::tuple<remove_cvref_t<X>>{x},
-      minicute::tuple<minicute::tuple_element_t<I + 1 + Is2, remove_cvref_t<Tuple>>...>{
-          get<I + 1 + Is2>(t)...});
-}
-} // namespace detail
-
-template <int I, class Tuple, class X>
-constexpr auto replace(Tuple const &t, X const &x) {
-  if constexpr (is_tuple_v<Tuple>) {
-    static_assert(0 <= I && I < static_cast<int>(tuple_size_v<Tuple>),
-                  "replace index is out of bounds");
-    return detail::replace_impl<I>(
-        t, x, std::make_index_sequence<I>{},
-        std::make_index_sequence<tuple_size_v<Tuple> - I - 1>{});
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "replace only works on tuples");
-  }
-}
-
-namespace detail {
-template <int Begin, int End, class Tuple, std::size_t... Is>
-constexpr auto take_impl(Tuple const &t, std::index_sequence<Is...>) {
-  return minicute::tuple<minicute::tuple_element_t<Begin + Is, remove_cvref_t<Tuple>>...>{
-      get<Begin + Is>(t)...};
-}
-} // namespace detail
-
-template <int Begin, int End, class Tuple>
-constexpr auto take(Tuple const &t) {
-  if constexpr (is_tuple_v<Tuple>) {
-    static_assert(0 <= Begin && Begin <= End, "take requires Begin <= End");
-    static_assert(End <= static_cast<int>(tuple_size_v<Tuple>),
-                  "take range is out of bounds");
-    return detail::take_impl<Begin, End>(
-        t, std::make_index_sequence<End - Begin>{});
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "take only works on tuples");
-  }
-}
-
-template <int... Is, class Tuple> constexpr auto select(Tuple const &t) {
-  if constexpr (is_tuple_v<Tuple>) {
-    static_assert(
-        ((0 <= Is && Is < static_cast<int>(tuple_size_v<Tuple>)) && ...),
-        "select index is out of bounds");
-    return minicute::tuple<minicute::tuple_element_t<Is, remove_cvref_t<Tuple>>...>{
-        get<Is>(t)...};
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "select only works on tuples");
-  }
-}
-
-template <int Begin, int End, class Tuple> constexpr auto group(Tuple const &t) {
-  if constexpr (is_tuple_v<Tuple>) {
-    static_assert(0 <= Begin && Begin <= End, "group requires Begin <= End");
-    static_assert(End <= static_cast<int>(tuple_size_v<Tuple>),
-                  "group range is out of bounds");
-    return minicute::tuple_cat(take<0, Begin>(t),
-                     minicute::tuple<remove_cvref_t<decltype(take<Begin, End>(t))>>{
-                         take<Begin, End>(t)},
-                     take<End, static_cast<int>(tuple_size_v<Tuple>)>(t));
-  } else {
-    static_assert(detail::always_false_v<Tuple>, "group only works on tuples");
-  }
-}
-
-namespace detail {
-template <class X, std::size_t... Is>
-constexpr auto repeat_impl(X const &x, std::index_sequence<Is...>) {
-  return minicute::tuple<std::conditional_t<true, remove_cvref_t<X>,
-                                       std::integral_constant<std::size_t, Is>>...>{
-      ((void)Is, x)...};
-}
-} // namespace detail
-
-template <int N, class X> constexpr auto repeat(X const &x) {
-  static_assert(0 <= N, "repeat requires a non-negative count");
-  return detail::repeat_impl(x, std::make_index_sequence<N>{});
-}
-
-template <class Guide, class X>
-constexpr auto repeat_like(Guide const &guide, X const &x) {
-  return unflatten(repeat<static_cast<int>(detail::flat_size_v<Guide>)>(x),
-                   guide);
-}
-
 template <class Tuple> constexpr auto product_each(Tuple const &tuple) {
   static_assert(is_tuple_v<Tuple>, "product_each only works on tuples");
   return transform(tuple, [](auto const &x) { return product(x); });
@@ -343,19 +259,20 @@ template <class A, class B> constexpr auto shape_div(A const &a, B const &b) {
   if constexpr (is_tuple_v<A> && is_tuple_v<B>) {
     static_assert(tuple_size_v<A> == tuple_size_v<B>,
                   "shape_div requires equal sizes");
-    return transform(a, b,
-                     [](auto const &x, auto const &y) { return shape_div(x, y); });
+    return transform(
+        a, b, [](auto const &x, auto const &y) { return shape_div(x, y); });
   } else {
     return ceil_div(a, b);
   }
 }
 
-template <class A, class B> constexpr auto elem_product(A const &a, B const &b) {
+template <class A, class B>
+constexpr auto elem_product(A const &a, B const &b) {
   if constexpr (is_tuple_v<A> && is_tuple_v<B>) {
     static_assert(tuple_size_v<A> == tuple_size_v<B>,
                   "elem_product requires equal sizes");
-    return transform(a, b,
-                     [](auto const &x, auto const &y) { return elem_product(x, y); });
+    return transform(
+        a, b, [](auto const &x, auto const &y) { return elem_product(x, y); });
   } else if constexpr (is_tuple_v<A>) {
     return transform(a, [&](auto const &x) { return elem_product(x, b); });
   } else if constexpr (is_tuple_v<B>) {
@@ -373,7 +290,8 @@ template <class A, class B, bool SameRank>
 struct same_tuple_profile_impl : std::false_type {};
 
 template <class... As, class... Bs>
-struct same_tuple_profile_impl<minicute::tuple<As...>, minicute::tuple<Bs...>, true>
+struct same_tuple_profile_impl<minicute::tuple<As...>, minicute::tuple<Bs...>,
+                               true>
     : std::bool_constant<(same_profile<As, Bs>::value && ...)> {};
 
 template <class... As, class... Bs>
@@ -396,10 +314,9 @@ template <class A, class B> constexpr auto compatible(A const &a, B const &b) {
       return false;
     } else {
       return minicute::apply(
-          transform(a, b,
-                    [](auto const &x, auto const &y) {
-                      return compatible(x, y);
-                    }),
+          transform(
+              a, b,
+              [](auto const &x, auto const &y) { return compatible(x, y); }),
           [](auto const &...xs) { return (true && ... && bool(xs)); });
     }
   } else if constexpr (!is_tuple_v<A>) {

@@ -257,18 +257,6 @@ constexpr auto left_inverse(LayoutLike const&) {
                 "TODO(stage4): implement left_inverse");
 }
 
-template <class LayoutLike, class CoTarget>
-constexpr auto complement(LayoutLike const&, CoTarget const&) {
-  static_assert(detail::always_false_v<LayoutLike, CoTarget>,
-                "TODO(stage4): implement complement(layout, cotarget)");
-}
-
-template <class LayoutLike>
-constexpr auto complement(LayoutLike const&) {
-  static_assert(detail::always_false_v<LayoutLike>,
-                "TODO(stage4): implement complement(layout)");
-}
-
 namespace detail {
 template <class T>
 std::ostream& print_value(std::ostream& os, T const& value);

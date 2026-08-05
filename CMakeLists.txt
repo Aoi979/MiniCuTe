@@ -30,6 +30,7 @@ set(MINICUTE_HEADERS
     include/minicute/container/detail/tuple_traits.hpp
     include/minicute/util/type_traits.hpp
     include/minicute/int_tuple.hpp
+    include/minicute/stride.hpp
     include/minicute/numeric/integral_constant.hpp
     include/minicute/numeric/integer_sequence.hpp
     include/minicute/layout.hpp

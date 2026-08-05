@@ -4,6 +4,7 @@
 // Students normally include only this file.
 
 #include "minicute/int_tuple.hpp"
+#include "minicute/stride.hpp"
 #include "minicute/layout.hpp"
 #include "minicute/layout_composed.hpp"
 #include "minicute/numeric/integral_constant.hpp"
