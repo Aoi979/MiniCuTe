@@ -9,10 +9,16 @@
 
 namespace minicute::detail {
 
+template <class T> struct is_minicute_tuple : std::false_type {};
+
+template <class... Ts>
+struct is_minicute_tuple<minicute::tuple<Ts...>> : std::true_type {};
+
 template <class T>
 inline constexpr bool ebo_storable_v =
-    std::is_empty_v<T> && !std::is_final_v<T> && !std::is_reference_v<T> && !std::is_const_v<T> &&
-    !std::is_volatile_v<T>;
+    std::is_empty_v<T> && !std::is_final_v<T> && !std::is_reference_v<T> &&
+    !std::is_const_v<T> && !std::is_volatile_v<T> &&
+    !is_minicute_tuple<std::remove_cvref_t<T>>::value;
 
 template <std::size_t I, class T, bool UseEbo = ebo_storable_v<T>> class tuple_leaf;
 

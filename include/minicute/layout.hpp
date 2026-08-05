@@ -1,7 +1,7 @@
 #pragma once
 
-#include <minicute/int_tuple.hpp>
 #include <cstddef>
+#include <minicute/int_tuple.hpp>
 #include <utility>
 
 namespace minicute {
@@ -82,6 +82,10 @@ constexpr auto compact_row_major(Shape const &shape, Current const &current) {
   }
 }
 
+template <class Coord, class Shape, class Stride>
+constexpr auto crd2idx(Coord const &coord, Shape const &shape,
+                       Stride const &stride);
+
 template <class Shape_, class Stride_ = void> struct Layout {
   using Shape = Shape_;
   using Stride = Stride_;
@@ -108,7 +112,6 @@ template <class Shape_, class Stride_ = void> struct Layout {
   template <class Coord> constexpr auto operator()(Coord const &coord) const {
     return crd2idx(coord, shape_, stride_);
   }
-
 
   template <class Coord0, class Coord1, class... Coords>
   constexpr auto operator()(Coord0 const &c0, Coord1 const &c1,
@@ -177,7 +180,6 @@ constexpr auto make_layout(Shape const &shape, LayoutRight) {
   return make_layout(shape, compact_row_major(shape));
 }
 
-
 template <class Index, class Shape, class Stride>
 constexpr auto idx2crd(Index const &idx, Shape const &shape,
                        Stride const &stride);
@@ -190,6 +192,25 @@ constexpr auto crd2idx(Coord const &coord, Shape const &shape,
                        Stride const &stride);
 
 namespace detail {
+template <class Coord, class Shape, class Stride, std::size_t I0,
+          std::size_t... Is>
+constexpr auto crd2idx_itt(Coord const &coord, Shape const &shape,
+                           Stride const &stride,
+                           std::index_sequence<I0, Is...>) {
+  if constexpr (sizeof...(Is) == 0) {
+    // A one-mode tuple is still an unbounded coordinate conversion.  Do not
+    // introduce an extra modulo here; this matches CuTe's crd2idx contract.
+    return crd2idx(coord, get<I0>(shape), get<I0>(stride));
+  } else {
+    auto mode_size = product(get<I0>(shape));
+    auto div = coord / mode_size;
+    auto mod = coord % mode_size;
+    return crd2idx(mod, get<I0>(shape), get<I0>(stride)) +
+           crd2idx_itt(div, shape, stride,
+                       std::index_sequence<Is...>{});
+  }
+}
+
 template <class Coord, class Shape, class Stride, std::size_t... Is>
 constexpr auto crd2idx_ttt(Coord const &coord, Shape const &shape,
                            Stride const &stride, std::index_sequence<Is...>) {
@@ -224,7 +245,9 @@ constexpr auto crd2idx(Coord const &coord, Shape const &shape,
       if constexpr (is_tuple_v<Stride>) {
         static_assert(tuple_size_v<Shape> == tuple_size_v<Stride>,
                       "Mismatched ranks");
-        return crd2idx(idx2crd(coord, shape), shape, stride);
+        return detail::crd2idx_itt(
+            coord, shape, stride,
+            std::make_index_sequence<tuple_size_v<Shape>>{});
       } else {
         static_assert(detail::always_false_v<Coord, Shape, Stride>,
                       "Invalid parameters");
@@ -437,8 +460,7 @@ constexpr auto slice_parts_node(Coord const &coord, Shape const &shape,
           slice_parts_collect(coord, shape, stride,
                               std::make_index_sequence<tuple_size_v<Coord>>{});
       if constexpr (tuple_size_v<decltype(child_parts.shape)> == 0) {
-        return make_slice_parts(tuple<>{}, tuple<>{},
-                                child_parts.offset);
+        return make_slice_parts(tuple<>{}, tuple<>{}, child_parts.offset);
       } else {
         return make_slice_parts(wrap(unwrap(child_parts.shape)),
                                 wrap(unwrap(child_parts.stride)),
@@ -506,10 +528,9 @@ inline constexpr bool is_static_true_v =
 
 template <int I, class OldShape, class OldStride, class NewShape,
           class NewStride>
-constexpr auto coalesce_impl(OldShape const &old_shape,
-                             OldStride const &old_stride,
-                             NewShape const &new_shape,
-                             NewStride const &new_stride) {
+constexpr auto
+coalesce_impl(OldShape const &old_shape, OldStride const &old_stride,
+              NewShape const &new_shape, NewStride const &new_stride) {
   if constexpr (I == -1) {
     if constexpr (is_static_one_v<NewShape>) {
       return make_layout(_1{}, _0{});
@@ -521,21 +542,20 @@ constexpr auto coalesce_impl(OldShape const &old_shape,
   } else if constexpr (is_static_one_v<NewShape>) {
     return coalesce_impl<I - 1>(old_shape, old_stride, get<I>(old_shape),
                                 get<I>(old_stride));
-  } else if constexpr (
-      is_static_integral_v<decltype(get<0>(wrap(new_shape)))> &&
-      is_static_true_v<decltype(get<I>(old_shape) * get<I>(old_stride) ==
-                                get<0>(wrap(new_stride)))>) {
-    auto merged_shape =
-        replace<0>(wrap(new_shape),
-                   get<I>(old_shape) * get<0>(wrap(new_shape)));
+  } else if constexpr (is_static_integral_v<decltype(get<0>(
+                           wrap(new_shape)))> &&
+                       is_static_true_v<decltype(get<I>(old_shape) *
+                                                     get<I>(old_stride) ==
+                                                 get<0>(wrap(new_stride)))>) {
+    auto merged_shape = replace<0>(wrap(new_shape),
+                                   get<I>(old_shape) * get<0>(wrap(new_shape)));
     auto merged_stride = replace<0>(wrap(new_stride), get<I>(old_stride));
     return coalesce_impl<I - 1>(old_shape, old_stride, unwrap(merged_shape),
                                 unwrap(merged_stride));
   } else {
     auto prepended_shape = prepend(wrap(new_shape), get<I>(old_shape));
     auto prepended_stride = prepend(wrap(new_stride), get<I>(old_stride));
-    return coalesce_impl<I - 1>(old_shape, old_stride,
-                                unwrap(prepended_shape),
+    return coalesce_impl<I - 1>(old_shape, old_stride, unwrap(prepended_shape),
                                 unwrap(prepended_stride));
   }
 }
@@ -549,9 +569,9 @@ constexpr auto coalesce(Layout<Shape, Stride> const &layout) {
   if constexpr (R == 0) {
     return make_layout(_1{}, _0{});
   } else {
-    return detail::coalesce_impl<R - 2>(
-        flat_shape, flat_stride, get<R - 1>(flat_shape),
-        get<R - 1>(flat_stride));
+    return detail::coalesce_impl<R - 2>(flat_shape, flat_stride,
+                                        get<R - 1>(flat_shape),
+                                        get<R - 1>(flat_stride));
   }
 }
 
@@ -593,4 +613,239 @@ constexpr auto cosize(Layout<Shape, Stride> const &layout) {
          _1{};
 }
 
+namespace detail {
+template <class Stride, class Shape>
+constexpr auto filter_zeros_value(Stride const &stride, Shape const &shape) {
+  if constexpr (is_tuple_v<Stride>) {
+    static_assert(is_tuple_v<Shape>,
+                  "filter_zeros requires matching Shape and Stride profiles");
+    static_assert(tuple_size_v<Stride> == tuple_size_v<Shape>,
+                  "filter_zeros requires matching Shape and Stride ranks");
+
+    return transform(stride, shape, [](auto const &s, auto const &sh) {
+      return filter_zeros_value(s, sh);
+    });
+  } else if constexpr (is_tuple_v<Shape>) {
+    static_assert(always_false_v<Stride, Shape>,
+                  "filter_zeros requires matching Shape and Stride profiles");
+  } else if constexpr (is_constant_v<0, Stride>) {
+    return _1{};
+  } else {
+    return shape;
+  }
+}
+} // namespace detail
+
+template <class Shape, class Stride>
+constexpr auto filter_zeros(Layout<Shape, Stride> const &layout) {
+  return make_layout(
+      detail::filter_zeros_value(layout.stride(), layout.shape()),
+      layout.stride());
+}
+
+template <class Shape, class Stride>
+constexpr auto filter(Layout<Shape, Stride> const &layout) {
+  return coalesce(filter_zeros(layout));
+}
+
+// Compose two ordinary Layouts and reduce the result to another ordinary
+// Layout whenever the mode-wise divisibility conditions permit it.  The
+// implementation follows the mixed-radix decomposition used by CuTe, but
+// keeps the scan state local to this function so the result types remain
+// visible to C++20's constexpr deduction.
+template <class LShape, class LStride, class RShape, class RStride>
+constexpr auto composition(Layout<LShape, LStride> const &lhs,
+                           Layout<RShape, RStride> const &rhs) {
+  static_assert(is_tuple_v<LShape> == is_tuple_v<LStride>,
+                "composition requires matching LHS Shape and Stride profiles");
+  static_assert(is_tuple_v<RShape> == is_tuple_v<RStride>,
+                "composition requires matching RHS Shape and Stride profiles");
+
+  if constexpr (is_tuple_v<LShape>) {
+    static_assert(tuple_size_v<LShape> == tuple_size_v<LStride>,
+                  "composition requires matching LHS Shape and Stride ranks");
+  }
+  if constexpr (is_tuple_v<RShape>) {
+    static_assert(tuple_size_v<RShape> == tuple_size_v<RStride>,
+                  "composition requires matching RHS Shape and Stride ranks");
+  }
+
+  // The scan returns (result_shape, result_stride, rest_shape, rest_stride).
+  // The first two fields are already emitted modes; the latter two describe
+  // the part of the RHS scalar mode that has not been consumed yet.
+  auto scan = [&]<int I, class ScanLShape, class ScanLStride,
+                class ResultShape, class ResultStride, class RestShape,
+                class RestStride>(
+                    auto &&self, ScanLShape const &lhs_shape,
+                    ScanLStride const &lhs_stride,
+                    ResultShape const &result_shape,
+                    ResultStride const &result_stride,
+                    RestShape const &rest_shape,
+                    RestStride const &rest_stride) -> auto {
+    constexpr int lhs_rank = static_cast<int>(tuple_size_v<ScanLShape>);
+
+    if constexpr (I >= lhs_rank - 1) {
+      return make_tuple(result_shape, result_stride, rest_shape,
+                        rest_stride);
+    } else {
+      auto curr_shape = get<I>(lhs_shape);
+      auto curr_stride = get<I>(lhs_stride);
+
+      if constexpr (is_static_integral_v<decltype(curr_shape)> &&
+                    is_static_integral_v<decltype(rest_stride)>) {
+        using CurrShape = remove_cvref_t<decltype(curr_shape)>;
+        using RestStrideValue = remove_cvref_t<decltype(rest_stride)>;
+        constexpr auto curr_shape_value = CurrShape::value;
+        constexpr auto rest_stride_value = RestStrideValue::value;
+        constexpr auto rest_stride_abs =
+            detail::static_abs(rest_stride_value);
+        static_assert((rest_stride_abs % curr_shape_value == 0) ||
+                          (rest_stride_abs < curr_shape_value),
+                      "composition stride divisibility condition failed");
+      }
+
+      auto next_shape = ceil_div(curr_shape, abs(rest_stride));
+      auto next_stride =
+          ceil_div(abs(rest_stride), curr_shape) * signum(rest_stride);
+
+      if constexpr (is_constant_v<1, decltype(next_shape)> ||
+                    is_constant_v<1, decltype(rest_shape)>) {
+        // The current mode contributes no independent result mode.  The
+        // remaining RHS shape is unchanged, but its stride is now measured
+        // relative to the next LHS mode.
+        return self.template operator()<I + 1>(
+            self, lhs_shape, lhs_stride, result_shape, result_stride,
+            rest_shape, next_stride);
+      } else {
+        auto new_shape = min(next_shape, rest_shape);
+
+        auto new_result_shape = append(result_shape, new_shape);
+        auto new_result_stride =
+            append(result_stride, rest_stride * curr_stride);
+
+        if constexpr (is_static_integral_v<decltype(new_shape)> &&
+                      is_static_integral_v<decltype(rest_shape)>) {
+          using NewShape = remove_cvref_t<decltype(new_shape)>;
+          using RestShapeValue = remove_cvref_t<decltype(rest_shape)>;
+          constexpr auto new_shape_value = NewShape::value;
+          constexpr auto rest_shape_value = RestShapeValue::value;
+          static_assert((rest_shape_value % new_shape_value) == 0,
+                        "composition shape divisibility condition failed");
+        }
+
+        return self.template operator()<I + 1>(
+            self, lhs_shape, lhs_stride, new_result_shape,
+            new_result_stride, rest_shape / new_shape, next_stride);
+      }
+    }
+  };
+
+  // RHS tuple modes are independent modes of the composed layout.  Compose
+  // each pair recursively, then concatenate the resulting ordinary Layouts
+  // rather than returning tuple<Layout...>.
+  auto compose_rhs_modes = [&]<class Self, class TupleLShape,
+                              class TupleLStride, class TupleRShape,
+                              class TupleRStride, std::size_t... Is>(
+                                 Self &&self, TupleLShape const &lhs_shape,
+                                 TupleLStride const &lhs_stride,
+                                 TupleRShape const &rhs_shape,
+                                 TupleRStride const &rhs_stride,
+                                 std::index_sequence<Is...>) -> auto {
+    if constexpr (sizeof...(Is) == 0) {
+      return make_layout(make_shape(), make_stride());
+    } else {
+      return make_layout(
+          self(self, lhs_shape, lhs_stride, get<Is>(rhs_shape),
+               get<Is>(rhs_stride))...);
+    }
+  };
+
+  // Composition needs the outside-domain-preserving variant of coalesce.
+  // In particular, (1):(1) must not become (1):(0) when the RHS domain is
+  // larger than one element.
+  auto coalesce_for_composition = [&]<class Shape, class Stride>(
+                                      Layout<Shape, Stride> const &layout) {
+    auto flat_shape = flatten(layout.shape());
+    auto flat_stride = flatten(layout.stride());
+    constexpr int flat_rank =
+        static_cast<int>(tuple_size_v<decltype(flat_shape)>);
+
+    if constexpr (flat_rank == 0) {
+      return make_layout(_1{}, _0{});
+    } else if constexpr (detail::is_static_one_v<decltype(
+                           get<flat_rank - 1>(flat_shape))>) {
+      return detail::coalesce_impl<flat_rank - 2>(
+          flat_shape, flat_stride, _2{}, get<flat_rank - 1>(flat_stride));
+    } else {
+      return detail::coalesce_impl<flat_rank - 2>(
+          flat_shape, flat_stride, get<flat_rank - 1>(flat_shape),
+          get<flat_rank - 1>(flat_stride));
+    }
+  };
+
+  auto compose_one = [&]<class Self, class ComposeLShape,
+                        class ComposeLStride, class ComposeRShape,
+                        class ComposeRStride>(
+                         Self &&self, ComposeLShape const &lhs_shape,
+                         ComposeLStride const &lhs_stride,
+                         ComposeRShape const &rhs_shape,
+                         ComposeRStride const &rhs_stride) -> auto {
+    if constexpr (is_tuple_v<ComposeRShape>) {
+      return compose_rhs_modes(
+          self, lhs_shape, lhs_stride, rhs_shape, rhs_stride,
+          std::make_index_sequence<tuple_size_v<ComposeRShape>>{});
+    } else if constexpr (is_tuple_v<ComposeRStride>) {
+      static_assert(detail::always_false_v<ComposeRShape, ComposeRStride>,
+                    "composition requires matching RHS Shape and Stride");
+    } else if constexpr (is_constant_v<0, ComposeRStride>) {
+      // A static stride-0 RHS always feeds the same input coordinate to the
+      // LHS, so its shape and stride already describe the result domain.
+      return make_layout(rhs_shape, rhs_stride);
+    } else if constexpr (!is_tuple_v<ComposeLShape>) {
+      static_assert(!is_tuple_v<ComposeLStride>,
+                    "composition requires matching LHS Shape and Stride");
+      return make_layout(rhs_shape, rhs_stride * lhs_stride);
+    } else {
+      static_assert(is_tuple_v<ComposeLStride>,
+                    "composition requires matching LHS Shape and Stride");
+      constexpr int lhs_rank = static_cast<int>(tuple_size_v<ComposeLShape>);
+      static_assert(lhs_rank > 0,
+                    "composition requires a non-empty LHS shape");
+
+      auto flat_lhs = coalesce_for_composition(
+          make_layout(lhs_shape, lhs_stride));
+      auto flat_shape = flat_lhs.shape();
+      auto flat_stride = flat_lhs.stride();
+
+      if constexpr (!is_tuple_v<decltype(flat_shape)>) {
+        return make_layout(rhs_shape, rhs_stride * flat_stride);
+      } else {
+        auto state = scan.template operator()<0>(
+            scan, flat_shape, flat_stride, tuple<>{}, tuple<>{}, rhs_shape,
+            rhs_stride);
+
+        auto result_shape = get<0>(state);
+        auto result_stride = get<1>(state);
+        auto rest_shape = get<2>(state);
+        auto rest_stride = get<3>(state);
+        auto last_stride =
+            get<tuple_size_v<decltype(flat_stride)> - 1>(flat_stride);
+
+        auto final_stride = rest_stride * last_stride;
+
+        if constexpr (tuple_size_v<decltype(result_shape)> == 0) {
+          return make_layout(rest_shape, final_stride);
+        } else if constexpr (is_constant_v<1, decltype(rest_shape)>) {
+          return make_layout(unwrap(result_shape), unwrap(result_stride));
+        } else {
+          return make_layout(append(result_shape, rest_shape),
+                             append(result_stride, final_stride));
+        }
+      }
+    }
+  };
+
+  return compose_one(compose_one, lhs.shape(), lhs.stride(), rhs.shape(),
+                     rhs.stride());
+}
 } // namespace minicute
