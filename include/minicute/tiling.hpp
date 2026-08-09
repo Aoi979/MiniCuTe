@@ -5,9 +5,8 @@
 namespace minicute {
 
 template <class Shape, class Order>
-constexpr auto make_ordered_layout(Shape const&, Order const&) {
-  static_assert(detail::always_false_v<Shape, Order>,
-                "TODO(stage5): implement make_ordered_layout");
+constexpr auto make_ordered_layout(Shape const& shape, Order const& order) {
+  return make_layout(shape, compact_order(shape, order));
 }
 
 template <class LShape, class LStride, class TShape, class TStride>
@@ -54,22 +53,56 @@ constexpr auto logical_divide(ComposedLayout<LayoutA, Offset, LayoutB> const& la
                      logical_divide(layout.layout_b(), tiler));
 }
 
+namespace detail {
+
+template <class Result, std::size_t... Is>
+constexpr auto tiled_unzip_impl(Result const& result,
+                                std::index_sequence<Is...>) {
+  return make_layout(minicute::layout<0>(result),
+                     minicute::layout<1, Is>(result)...);
+}
+
+template <class Result, std::size_t... I0, std::size_t... I1>
+constexpr auto flat_unzip_impl(Result const& result,
+                               std::index_sequence<I0...>,
+                               std::index_sequence<I1...>) {
+  return make_layout(minicute::layout<0, I0>(result)...,
+                     minicute::layout<1, I1>(result)...);
+}
+
+}  // namespace detail
+
 template <class Shape, class Stride, class Tiler>
-constexpr auto zipped_divide(Layout<Shape, Stride> const&, Tiler const&) {
-  static_assert(detail::always_false_v<Shape, Stride, Tiler>,
-                "TODO(stage5): implement zipped_divide");
+constexpr auto zipped_divide(Layout<Shape, Stride> const &layout,
+                             Tiler const &tiler) {
+  auto divided = logical_divide(layout, tiler);
+  return make_layout(zip2_by(shape(divided), tiler),
+                     zip2_by(stride(divided), tiler));
 }
 
 template <class Shape, class Stride, class Tiler>
-constexpr auto tiled_divide(Layout<Shape, Stride> const&, Tiler const&) {
-  static_assert(detail::always_false_v<Shape, Stride, Tiler>,
-                "TODO(stage5): implement tiled_divide");
+constexpr auto tiled_divide(Layout<Shape, Stride> const& layout,
+                            Tiler const& tiler) {
+  auto result = zipped_divide(layout, tiler);
+  constexpr std::size_t result_rank = static_cast<std::size_t>(
+      decltype(rank(shape<1>(result)))::value);
+
+  return detail::tiled_unzip_impl(
+      result, std::make_index_sequence<result_rank>{});
 }
 
 template <class Shape, class Stride, class Tiler>
-constexpr auto flat_divide(Layout<Shape, Stride> const&, Tiler const&) {
-  static_assert(detail::always_false_v<Shape, Stride, Tiler>,
-                "TODO(stage5): implement flat_divide");
+constexpr auto flat_divide(Layout<Shape, Stride> const& layout,
+                           Tiler const& tiler) {
+  auto result = zipped_divide(layout, tiler);
+  constexpr std::size_t result_rank0 = static_cast<std::size_t>(
+      decltype(rank(shape<0>(result)))::value);
+  constexpr std::size_t result_rank1 = static_cast<std::size_t>(
+      decltype(rank(shape<1>(result)))::value);
+
+  return detail::flat_unzip_impl(
+      result, std::make_index_sequence<result_rank0>{},
+      std::make_index_sequence<result_rank1>{});
 }
 
 template <class BlockShape, class BlockStride, class TilerShape,
@@ -80,6 +113,68 @@ constexpr auto logical_product(
   auto complement_layout =
       complement(block, size(block) * cosize(tiler));
   return make_layout(block, composition(complement_layout, tiler));
+}
+
+template <class Shape, class Stride, class Tiler>
+constexpr auto logical_product(Layout<Shape, Stride> const& block,
+                               Tiler const& tiler) {
+  if constexpr (is_tuple_v<Tiler>) {
+    constexpr auto block_rank =
+        static_cast<std::size_t>(decltype(rank(block.shape()))::value);
+    static_assert(tuple_size_v<Tiler> <= block_rank,
+                  "logical_product: too many tiler modes");
+    static_assert(tuple_size_v<Tiler> != 0,
+                  "logical_product: empty tiler is not supported");
+
+    return [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      return [&]<std::size_t... RestIs>(
+          std::index_sequence<RestIs...>) {
+        return make_layout(
+            logical_product(minicute::layout<Is>(block), get<Is>(tiler))...,
+            minicute::layout<tuple_size_v<Tiler> + RestIs>(block)...);
+      }(std::make_index_sequence<block_rank - tuple_size_v<Tiler>>{});
+    }(std::make_index_sequence<tuple_size_v<Tiler>>{});
+  } else if constexpr (detail::is_underscore_v<Tiler>) {
+    return block;
+  } else if constexpr (is_integral_v<Tiler>) {
+    return logical_product(block, make_layout(tiler));
+  } else {
+    static_assert(detail::always_false_v<Shape, Stride, Tiler>,
+                  "logical_product requires a Layout, Shape, or underscore tiler");
+  }
+}
+
+template <class Shape, class Stride, class Tiler>
+constexpr auto zipped_product(Layout<Shape, Stride> const& block,
+                              Tiler const& tiler) {
+  auto result = logical_product(block, tiler);
+  return make_layout(zip2_by(shape(result), tiler),
+                     zip2_by(stride(result), tiler));
+}
+
+template <class Shape, class Stride, class Tiler>
+constexpr auto tiled_product(Layout<Shape, Stride> const& block,
+                             Tiler const& tiler) {
+  auto result = zipped_product(block, tiler);
+  constexpr std::size_t result_rank = static_cast<std::size_t>(
+      decltype(rank(shape<1>(result)))::value);
+
+  return detail::tiled_unzip_impl(
+      result, std::make_index_sequence<result_rank>{});
+}
+
+template <class Shape, class Stride, class Tiler>
+constexpr auto flat_product(Layout<Shape, Stride> const& block,
+                            Tiler const& tiler) {
+  auto result = zipped_product(block, tiler);
+  constexpr std::size_t result_rank0 = static_cast<std::size_t>(
+      decltype(rank(shape<0>(result)))::value);
+  constexpr std::size_t result_rank1 = static_cast<std::size_t>(
+      decltype(rank(shape<1>(result)))::value);
+
+  return detail::flat_unzip_impl(
+      result, std::make_index_sequence<result_rank0>{},
+      std::make_index_sequence<result_rank1>{});
 }
 
 template <class Shape, class Stride, class Tiler>
@@ -95,9 +190,13 @@ constexpr auto raked_product(Layout<Shape, Stride> const&, Tiler const&) {
 }
 
 template <class Shape, class Stride, class TargetShape>
-constexpr auto tile_to_shape(Layout<Shape, Stride> const&, TargetShape const&) {
-  static_assert(detail::always_false_v<Shape, Stride, TargetShape>,
-                "TODO(stage5): implement tile_to_shape");
+constexpr auto tile_to_shape(Layout<Shape, Stride> const& block,
+                             TargetShape const& target_shape) {
+  // TODO(stage5): This is a simplified logical_divide-based implementation.
+  // It does not yet preserve the full block layout semantics of CuTe's
+  // tile_to_shape (e.g. arbitrary block strides and mode orders).
+  auto target_layout = make_layout(target_shape);
+  return flat_divide(target_layout, shape(block));
 }
 
 template <class Engine, class Layout, class TileShape, class TileCoord>

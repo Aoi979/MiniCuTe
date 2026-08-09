@@ -46,6 +46,52 @@ constexpr auto transform_impl(TupleA const &a, TupleB const &b, F &&f,
 
 } // namespace detail
 
+template <class T, class TG>
+constexpr auto zip2_by(T const &t, TG const &guide);
+
+namespace detail {
+
+template <class T, class TG, std::size_t... I0, std::size_t... I1>
+constexpr auto zip2_by_impl(T const &t, TG const &guide,
+                            std::index_sequence<I0...>,
+                            std::index_sequence<I1...>) {
+  constexpr std::size_t guide_rank = tuple_size_v<TG>;
+
+  auto split = make_tuple(
+      minicute::zip2_by(get<I0>(t), get<I0>(guide))...);
+
+  return make_tuple(
+      make_tuple(get<0>(get<I0>(split))...),
+      make_tuple(get<1>(get<I0>(split))...,
+                 get<guide_rank + I1>(t)...));
+}
+
+} // namespace detail
+
+template <class T, class TG>
+constexpr auto zip2_by(T const &t, TG const &guide) {
+  if constexpr (is_tuple_v<T>) {
+    if constexpr (is_tuple_v<TG>) {
+      constexpr std::size_t value_rank = tuple_size_v<T>;
+      constexpr std::size_t guide_rank = tuple_size_v<TG>;
+
+      static_assert(value_rank >= guide_rank,
+                    "zip2_by guide rank exceeds value rank");
+
+      return detail::zip2_by_impl(
+          t, guide, std::make_index_sequence<guide_rank>{},
+          std::make_index_sequence<value_rank - guide_rank>{});
+    } else {
+      // A scalar guide marks an already formed rank-2 mode.
+      static_assert(tuple_size_v<T> == 2,
+                    "zip2_by requires a rank-2 terminal");
+      return t;
+    }
+  } else {
+    return t;
+  }
+}
+
 template <class Tuple, class F>
 constexpr auto for_each(Tuple const &tuple, F &&f) {
   static_assert(is_tuple_v<Tuple>, "for_each only works on tuples");

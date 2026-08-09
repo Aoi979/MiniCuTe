@@ -81,7 +81,9 @@ template <class Shape0, class Stride0, class Shape1, class Stride1,
 constexpr auto make_layout(Layout<Shape0, Stride0> const &layout0,
                            Layout<Shape1, Stride1> const &layout1,
                            Layouts const &...layouts) {
-  return make_layout(make_layout(layout0, layout1), layouts...);
+  return make_layout(
+      make_shape(layout0.shape(), layout1.shape(), layouts.shape()...),
+      make_stride(layout0.stride(), layout1.stride(), layouts.stride()...));
 }
 
 template <std::size_t... Is, class Shape, class Stride>
