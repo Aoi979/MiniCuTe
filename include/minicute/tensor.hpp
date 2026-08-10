@@ -122,6 +122,23 @@ constexpr auto make_tensor(std::array<T, N> const& storage, Layout const& layout
   return make_tensor(storage.data(), layout);
 }
 
+namespace detail {
+
+
+template <class Engine, class OldLayout, class NewLayout>
+constexpr auto rebind_tensor(Tensor<Engine, OldLayout>& tensor,
+                             NewLayout const& new_layout) {
+  return make_tensor(tensor.data(), new_layout);
+}
+
+template <class Engine, class OldLayout, class NewLayout>
+constexpr auto rebind_tensor(Tensor<Engine, OldLayout> const& tensor,
+                             NewLayout const& new_layout) {
+  return make_tensor(tensor.data(), new_layout);
+}
+
+}  // namespace detail
+
 template <class Engine, class Layout>
 constexpr decltype(auto) shape(Tensor<Engine, Layout> const& tensor) {
   return tensor.shape();
@@ -134,6 +151,11 @@ constexpr decltype(auto) layout(Tensor<Engine, Layout> const& tensor) {
 
 template <class Engine, class Layout>
 constexpr decltype(auto) data(Tensor<Engine, Layout>& tensor) {
+  return tensor.data();
+}
+
+template <class Engine, class Layout>
+constexpr decltype(auto) data(Tensor<Engine, Layout> const& tensor) {
   return tensor.data();
 }
 

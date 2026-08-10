@@ -17,6 +17,18 @@ constexpr auto logical_divide(
   return composition(layout, make_layout(tiler, rest));
 }
 
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto logical_divide(Tensor<Engine, TensorLayout>& tensor,
+                              Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, logical_divide(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto logical_divide(Tensor<Engine, TensorLayout> const& tensor,
+                              Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, logical_divide(tensor.layout(), tiler));
+}
+
 template <class Shape, class Stride, class Tiler>
 constexpr auto logical_divide(Layout<Shape, Stride> const& layout,
                               Tiler const& tiler) {
@@ -80,6 +92,18 @@ constexpr auto zipped_divide(Layout<Shape, Stride> const &layout,
                      zip2_by(stride(divided), tiler));
 }
 
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto zipped_divide(Tensor<Engine, TensorLayout>& tensor,
+                             Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, zipped_divide(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto zipped_divide(Tensor<Engine, TensorLayout> const& tensor,
+                             Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, zipped_divide(tensor.layout(), tiler));
+}
+
 template <class Shape, class Stride, class Tiler>
 constexpr auto tiled_divide(Layout<Shape, Stride> const& layout,
                             Tiler const& tiler) {
@@ -89,6 +113,18 @@ constexpr auto tiled_divide(Layout<Shape, Stride> const& layout,
 
   return detail::tiled_unzip_impl(
       result, std::make_index_sequence<result_rank>{});
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto tiled_divide(Tensor<Engine, TensorLayout>& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, tiled_divide(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto tiled_divide(Tensor<Engine, TensorLayout> const& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, tiled_divide(tensor.layout(), tiler));
 }
 
 template <class Shape, class Stride, class Tiler>
@@ -103,6 +139,18 @@ constexpr auto flat_divide(Layout<Shape, Stride> const& layout,
   return detail::flat_unzip_impl(
       result, std::make_index_sequence<result_rank0>{},
       std::make_index_sequence<result_rank1>{});
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto flat_divide(Tensor<Engine, TensorLayout>& tensor,
+                           Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, flat_divide(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto flat_divide(Tensor<Engine, TensorLayout> const& tensor,
+                           Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, flat_divide(tensor.layout(), tiler));
 }
 
 template <class BlockShape, class BlockStride, class TilerShape,
@@ -144,12 +192,40 @@ constexpr auto logical_product(Layout<Shape, Stride> const& block,
   }
 }
 
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto logical_product(Tensor<Engine, TensorLayout>& tensor,
+                               Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               logical_product(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto logical_product(Tensor<Engine, TensorLayout> const& tensor,
+                               Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               logical_product(tensor.layout(), tiler));
+}
+
 template <class Shape, class Stride, class Tiler>
 constexpr auto zipped_product(Layout<Shape, Stride> const& block,
                               Tiler const& tiler) {
   auto result = logical_product(block, tiler);
   return make_layout(zip2_by(shape(result), tiler),
                      zip2_by(stride(result), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto zipped_product(Tensor<Engine, TensorLayout>& tensor,
+                              Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               zipped_product(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto zipped_product(Tensor<Engine, TensorLayout> const& tensor,
+                              Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               zipped_product(tensor.layout(), tiler));
 }
 
 template <class Shape, class Stride, class Tiler>
@@ -161,6 +237,20 @@ constexpr auto tiled_product(Layout<Shape, Stride> const& block,
 
   return detail::tiled_unzip_impl(
       result, std::make_index_sequence<result_rank>{});
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto tiled_product(Tensor<Engine, TensorLayout>& tensor,
+                             Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               tiled_product(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto tiled_product(Tensor<Engine, TensorLayout> const& tensor,
+                             Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               tiled_product(tensor.layout(), tiler));
 }
 
 template <class Shape, class Stride, class Tiler>
@@ -175,6 +265,20 @@ constexpr auto flat_product(Layout<Shape, Stride> const& block,
   return detail::flat_unzip_impl(
       result, std::make_index_sequence<result_rank0>{},
       std::make_index_sequence<result_rank1>{});
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto flat_product(Tensor<Engine, TensorLayout>& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               flat_product(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto flat_product(Tensor<Engine, TensorLayout> const& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor,
+                               flat_product(tensor.layout(), tiler));
 }
 
 template <class Shape, class Stride, class Tiler>
@@ -200,10 +304,24 @@ constexpr auto tile_to_shape(Layout<Shape, Stride> const& block,
 }
 
 template <class Engine, class Layout, class TileShape, class TileCoord>
-constexpr auto local_tile(Tensor<Engine, Layout>&, TileShape const&,
-                          TileCoord const&) {
-  static_assert(detail::always_false_v<Engine, Layout, TileShape, TileCoord>,
-                "TODO(stage5): implement local_tile");
+constexpr auto local_tile(Tensor<Engine, Layout>& tensor,
+                          TileShape const& tiler,
+                          TileCoord const& coord) {
+  // Basic inner partitioning:
+  //   zipped_divide(tensor, tiler) -> (Tile, Rest)
+  //   keep the complete Tile and select one coordinate from Rest.
+  auto tiled = zipped_divide(tensor, tiler);
+  auto tile_coord = repeat_like(get<0>(shape(tiled)), _);
+  return tiled(tile_coord, coord);
+}
+
+template <class Engine, class Layout, class TileShape, class TileCoord>
+constexpr auto local_tile(Tensor<Engine, Layout> const& tensor,
+                          TileShape const& tiler,
+                          TileCoord const& coord) {
+  auto tiled = zipped_divide(tensor, tiler);
+  auto tile_coord = repeat_like(get<0>(shape(tiled)), _);
+  return tiled(tile_coord, coord);
 }
 
 template <class Engine, class Layout, class TileShape, class TileCoord>

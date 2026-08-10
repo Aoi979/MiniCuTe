@@ -64,6 +64,8 @@ if(BUILD_TESTING AND MINICUTE_BUILD_TESTS)
     minicute_add_test(minicute_stage1 tests/stage1_core.cpp)
     minicute_add_test(minicute_stage2 tests/stage2_layout.cpp)
     minicute_add_test(minicute_stage3 tests/stage3_tensor.cpp)
+    minicute_add_test(minicute_tiling_tensor_wrappers
+                      tests/tiling_tensor_wrappers.cpp)
 
     if(MINICUTE_BUILD_TODO_STAGES)
         minicute_add_test(minicute_stage4 tests/stage4_algebra.cpp)

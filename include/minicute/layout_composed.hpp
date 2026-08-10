@@ -193,6 +193,18 @@ constexpr auto composition(
   return composition(composition(lhs, rhs.layout_a()), rhs.layout_b());
 }
 
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto composition(Tensor<Engine, TensorLayout>& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, composition(tensor.layout(), tiler));
+}
+
+template <class Engine, class TensorLayout, class Tiler>
+constexpr auto composition(Tensor<Engine, TensorLayout> const& tensor,
+                            Tiler const& tiler) {
+  return detail::rebind_tensor(tensor, composition(tensor.layout(), tiler));
+}
+
 template <class Coord, class SrcShape, class DstShape>
 constexpr auto crd2crd(Coord const& coord, SrcShape const& src_shape,
                        DstShape const& dst_shape) {
